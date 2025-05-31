@@ -439,6 +439,12 @@ impl EventProcessor {
             EventMsg::GetHistoryEntryResponse(_) => {
                 // Currently ignored in exec output.
             }
+            EventMsg::CopilotAuthStarted(_) => {
+                // Currently ignored in exec output.
+            }
+            EventMsg::CopilotAuthComplete(_) => {
+                // Currently ignored in exec output.
+            }
         }
     }
 }

@@ -10,6 +10,9 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
+[features]
+cli = ["codex-common/cli"]
+
 [dependencies]
 anyhow = "1"
 async-channel = "2.3.1"
@@ -17,6 +20,7 @@ base64 = "0.21"
 bytes = "1.10.1"
 codex-apply-patch = { path = "../apply-patch" }
 codex-mcp-client = { path = "../mcp-client" }
+codex-common = { path = "../common" }
 dirs = "6"
 env-flags = "0.1.1"
 eventsource-stream = "0.2.3"
@@ -39,6 +43,7 @@ tokio = { version = "1", features = [
     "process",
     "rt-multi-thread",
     "signal",
+    "time",
 ] }
 tokio-util = "0.7.14"
 toml = "0.8.20"
@@ -47,6 +52,23 @@ tree-sitter = "0.25.3"
 tree-sitter-bash = "0.23.3"
 uuid = { version = "1", features = ["serde", "v4"] }
 wildmatch = "2.4.0"
+zed_extension_api = "0.5.0"
+
+# TODO: Add full Zed copilot integration for advanced language server features
+# copilot = { path = "../crates/copilot" }
+# node_runtime = { path = "../crates/node_runtime" }
+# http_client = { path = "../crates/http_client" }
+# language = { path = "../crates/language" }
+# settings = { path = "../crates/settings" }
+# gpui = { path = "../crates/gpui" }
+# fs = { path = "../crates/fs" }
+# client = { path = "../crates/client" }
+# lsp = { path = "../crates/lsp" }
+
+# Examples of using Zed crates via git
+# rope = { git = "https://github.com/zed-industries/zed", path = "crates/rope" }
+# gpui = { git = "https://github.com/zed-industries/zed", path = "crates/gpui" }
+# fuzzy = { git = "https://github.com/zed-industries/zed", path = "crates/fuzzy" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4.1"

@@ -52,20 +52,33 @@ impl ModelProviderInfo {
     /// cannot be found, returns an error.
     pub fn api_key(&self) -> crate::error::Result<Option<String>> {
         match &self.env_key {
-            Some(env_key) => std::env::var(env_key)
-                .and_then(|v| {
-                    if v.trim().is_empty() {
-                        Err(VarError::NotPresent)
-                    } else {
-                        Ok(Some(v))
+            Some(env_key) => {
+                // Special handling for Copilot tokens - try to load from persistent storage
+                if env_key == "COPILOT_TOKEN" && self.name == "GitHub Copilot" {
+                    if let Some(token) = crate::copilot::load_copilot_token() {
+                        // Also set it in the environment for this session
+                        unsafe {
+                            std::env::set_var("COPILOT_TOKEN", &token);
+                        }
+                        return Ok(Some(token));
                     }
-                })
-                .map_err(|_| {
-                    crate::error::CodexErr::EnvVar(EnvVarError {
-                        var: env_key.clone(),
-                        instructions: self.env_key_instructions.clone(),
+                }
+                
+                std::env::var(env_key)
+                    .and_then(|v| {
+                        if v.trim().is_empty() {
+                            Err(VarError::NotPresent)
+                        } else {
+                            Ok(Some(v))
+                        }
                     })
-                }),
+                    .map_err(|_| {
+                        crate::error::CodexErr::EnvVar(EnvVarError {
+                            var: env_key.clone(),
+                            instructions: self.env_key_instructions.clone(),
+                        })
+                    })
+            }
             None => Ok(None),
         }
     }
@@ -153,6 +166,16 @@ pub fn built_in_model_providers() -> HashMap<String, ModelProviderInfo> {
                 base_url: "https://api.groq.com/openai/v1".into(),
                 env_key: Some("GROQ_API_KEY".into()),
                 env_key_instructions: None,
+                wire_api: WireApi::Chat,
+            },
+        ),
+        (
+            "copilot",
+            P {
+                name: "GitHub Copilot".into(),
+                base_url: "https://proxy.individual.githubcopilot.com".into(),
+                env_key: Some("COPILOT_TOKEN".into()),
+                env_key_instructions: Some("Authenticate with GitHub Copilot using 'codex copilot auth' or set COPILOT_TOKEN manually.".into()),
                 wire_api: WireApi::Chat,
             },
         ),

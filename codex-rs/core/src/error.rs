@@ -100,6 +100,9 @@ pub enum CodexErr {
     #[error(transparent)]
     TokioJoin(#[from] JoinError),
 
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
     #[error("{0}")]
     EnvVar(EnvVarError),
 }

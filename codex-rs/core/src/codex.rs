@@ -39,6 +39,8 @@ use crate::client_common::ResponseEvent;
 use crate::config::Config;
 use crate::config_types::ShellEnvironmentPolicy;
 use crate::conversation_history::ConversationHistory;
+// TODO: Import full copilot integration when ready
+
 use crate::error::CodexErr;
 use crate::error::Result as CodexResult;
 use crate::error::SandboxErr;
@@ -93,6 +95,8 @@ pub struct Codex {
     next_id: AtomicU64,
     tx_sub: Sender<Submission>,
     rx_event: Receiver<Event>,
+    // TODO: Add copilot client for AI assistance
+
 }
 
 impl Codex {
@@ -121,11 +125,13 @@ impl Codex {
             next_id: AtomicU64::new(0),
             tx_sub,
             rx_event,
+
         };
         let init_id = codex.submit(configure_session).await?;
 
         Ok((codex, init_id))
     }
+
 
     /// Submit the `op` wrapped in a `Submission` with a unique ID.
     pub async fn submit(&self, op: Op) -> CodexResult<String> {
@@ -157,6 +163,7 @@ impl Codex {
         Ok(event)
     }
 }
+
 
 /// Context for an initialized model agent
 ///
@@ -668,6 +675,22 @@ async fn submission_loop(
                         error!("failed to send event: {e:?}");
                     }
                 }
+            }
+            Op::CopilotAuth => {
+                let tx_event = tx_event.clone();
+                let sub_id = sub.id.clone();
+                
+                tokio::spawn(async move {
+                    if let Err(e) = crate::copilot::handle_copilot_auth(tx_event.clone(), sub_id.clone()).await {
+                        let event = Event {
+                            id: sub_id,
+                            msg: EventMsg::Error(ErrorEvent {
+                                message: format!("Copilot authentication failed: {}", e),
+                            }),
+                        };
+                        tx_event.send(event).await.ok();
+                    }
+                });
             }
             Op::UserInput { items } => {
                 let sess = match sess.as_ref() {

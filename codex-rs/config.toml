@@ -1,0 +1,68 @@
+# Codex Configuration File
+# This file configures the Codex CLI with various models and profiles
+
+# Default settings
+model = "claude-sonnet-4"
+model_provider = "copilot"
+approval_policy = "unless-allow-listed"
+sandbox_permissions = ["disk-full-read-access"]
+disable_response_storage = false
+
+# Set default profile
+profile = "copilot-sonnet"
+
+# Model provider configurations
+[model_providers.copilot]
+name = "GitHub Copilot"
+base_url = "https://proxy.individual.githubcopilot.com"
+env_key = "COPILOT_TOKEN"
+env_key_instructions = "Authenticate with GitHub Copilot using 'codex copilot auth' or set COPILOT_TOKEN manually."
+wire_api = "chat"
+
+[model_providers.anthropic]
+name = "Anthropic"
+base_url = "https://api.anthropic.com"
+env_key = "ANTHROPIC_API_KEY"
+env_key_instructions = "Create an API key at https://console.anthropic.com and export it as ANTHROPIC_API_KEY."
+wire_api = "chat"
+
+# Profile definitions
+[profiles.copilot-sonnet]
+model = "claude-sonnet-4"
+model_provider = "copilot"
+approval_policy = "unless-allow-listed"
+disable_response_storage = false
+
+[profiles.copilot-sonnet-thinking]
+model = "claude-sonnet-4-thinking"
+model_provider = "copilot"
+approval_policy = "unless-allow-listed"
+disable_response_storage = false
+
+[profiles.copilot-opus]
+model = "claude-opus-4"
+model_provider = "copilot"
+approval_policy = "unless-allow-listed"
+disable_response_storage = false
+
+[profiles.copilot-haiku]
+model = "claude-3-5-haiku"
+model_provider = "copilot"
+approval_policy = "on-failure"
+disable_response_storage = false
+
+[profiles.anthropic-sonnet]
+model = "claude-sonnet-4"
+model_provider = "anthropic"
+approval_policy = "unless-allow-listed"
+disable_response_storage = false
+
+# Shell environment policy
+[shell_environment_policy]
+inherit = "core"
+include_only = ["PATH", "HOME", "USER", "LANG", "LC_ALL", "COPILOT_TOKEN"]
+
+# History settings
+[history]
+persistence = "save-all"
+

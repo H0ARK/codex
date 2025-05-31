@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
+
 use mcp_types::CallToolResult;
 use serde::Deserialize;
 use serde::Serialize;
@@ -67,6 +68,9 @@ pub enum Op {
     /// Abort current task.
     /// This server sends no corresponding Event
     Interrupt,
+
+    /// Authenticate with GitHub Copilot using device flow
+    CopilotAuth,
 
     /// Input from the user
     UserInput {
@@ -140,6 +144,52 @@ pub struct SandboxPolicy {
 impl From<Vec<SandboxPermission>> for SandboxPolicy {
     fn from(permissions: Vec<SandboxPermission>) -> Self {
         Self { permissions }
+    }
+}
+
+// Conversions from codex-common types to break circular dependency
+#[cfg(feature = "cli")]
+impl From<codex_common::ApprovalModeCliArg> for AskForApproval {
+    fn from(value: codex_common::ApprovalModeCliArg) -> Self {
+        match value {
+            codex_common::ApprovalModeCliArg::UnlessAllowListed => AskForApproval::UnlessAllowListed,
+            codex_common::ApprovalModeCliArg::OnFailure => AskForApproval::OnFailure,
+            codex_common::ApprovalModeCliArg::Never => AskForApproval::Never,
+        }
+    }
+}
+
+#[cfg(feature = "cli")]
+impl From<codex_common::AskForApproval> for AskForApproval {
+    fn from(value: codex_common::AskForApproval) -> Self {
+        match value {
+            codex_common::AskForApproval::UnlessAllowListed => AskForApproval::UnlessAllowListed,
+            codex_common::AskForApproval::OnFailure => AskForApproval::OnFailure,
+            codex_common::AskForApproval::Never => AskForApproval::Never,
+        }
+    }
+}
+
+#[cfg(feature = "cli")]
+impl From<codex_common::SandboxPermission> for SandboxPermission {
+    fn from(value: codex_common::SandboxPermission) -> Self {
+        match value {
+            codex_common::SandboxPermission::DiskFullReadAccess => SandboxPermission::DiskFullReadAccess,
+            codex_common::SandboxPermission::DiskWritePlatformUserTempFolder => SandboxPermission::DiskWritePlatformUserTempFolder,
+            codex_common::SandboxPermission::DiskWritePlatformGlobalTempFolder => SandboxPermission::DiskWritePlatformGlobalTempFolder,
+            codex_common::SandboxPermission::DiskWriteCwd => SandboxPermission::DiskWriteCwd,
+            codex_common::SandboxPermission::DiskWriteFolder(path) => SandboxPermission::DiskWriteFolder { folder: path },
+            codex_common::SandboxPermission::DiskFullWriteAccess => SandboxPermission::DiskFullWriteAccess,
+            codex_common::SandboxPermission::NetworkFullAccess => SandboxPermission::NetworkFullAccess,
+        }
+    }
+}
+
+#[cfg(feature = "cli")]
+impl From<Vec<codex_common::SandboxPermission>> for SandboxPolicy {
+    fn from(permissions: Vec<codex_common::SandboxPermission>) -> Self {
+        let converted_permissions: Vec<SandboxPermission> = permissions.into_iter().map(Into::into).collect();
+        Self { permissions: converted_permissions }
     }
 }
 
@@ -345,6 +395,12 @@ pub enum EventMsg {
 
     ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent),
 
+    /// Copilot authentication started
+    CopilotAuthStarted(CopilotAuthStartedEvent),
+
+    /// Copilot authentication completed
+    CopilotAuthComplete(CopilotAuthCompleteEvent),
+
     BackgroundEvent(BackgroundEventEvent),
 
     /// Notification that the agent is about to apply a code patch. Mirrors
@@ -451,6 +507,18 @@ pub struct ApplyPatchApprovalRequestEvent {
     /// When set, the agent is asking the user to allow writes under this root for the remainder of the session.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grant_root: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CopilotAuthStartedEvent {
+    pub verification_uri: String,
+    pub user_code: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CopilotAuthCompleteEvent {
+    pub success: bool,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

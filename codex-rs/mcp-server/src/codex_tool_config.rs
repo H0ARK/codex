@@ -157,7 +157,7 @@ impl CodexToolCallParam {
             config: cli_overrides,
         } = self;
         let sandbox_policy = sandbox_permissions.map(|perms| {
-            SandboxPolicy::from(perms.into_iter().map(Into::into).collect::<Vec<_>>())
+            SandboxPolicy::from(perms.into_iter().map(Into::into).collect::<Vec<codex_core::protocol::SandboxPermission>>())
         });
 
         // Build ConfigOverrides recognised by codex-core.

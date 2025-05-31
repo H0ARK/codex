@@ -1,0 +1,548 @@
+//! Panel system adapted from Zed for Ratatui
+//! 
+//! This module demonstrates how to extract Zed's excellent panel patterns
+//! and adapt them for terminal-based UI using Ratatui.
+
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use ratatui::{
+    backend::Backend,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
+    Frame, Terminal,
+};
+use std::collections::HashMap;
+
+/// Core panel trait - adapted from Zed's Panel trait
+pub trait Panel {
+    fn title(&self) -> &str;
+    fn render(&mut self, frame: &mut Frame, area: Rect);
+    fn handle_event(&mut self, event: &Event) -> bool;
+    fn is_visible(&self) -> bool;
+    fn toggle_visibility(&mut self);
+}
+
+/// Panel position in the layout
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PanelPosition {
+    Left,
+    Right,
+    Bottom,
+    Floating,
+}
+
+/// Panel manager - coordinates multiple panels
+pub struct PanelManager {
+    panels: HashMap<String, Box<dyn Panel>>,
+    layout: PanelLayout,
+    active_panel: Option<String>,
+    left_panel_width: u16,
+    right_panel_width: u16,
+    bottom_panel_height: u16,
+}
+
+impl PanelManager {
+    pub fn new() -> Self {
+        Self {
+            panels: HashMap::new(),
+            layout: PanelLayout::default(),
+            active_panel: None,
+            left_panel_width: 30,
+            right_panel_width: 30,
+            bottom_panel_height: 10,
+        }
+    }
+
+    pub fn add_panel(&mut self, id: String, panel: Box<dyn Panel>, position: PanelPosition) {
+        self.panels.insert(id.clone(), panel);
+        self.layout.add_panel(id, position);
+    }
+
+    pub fn toggle_panel(&mut self, id: &str) {
+        if let Some(panel) = self.panels.get_mut(id) {
+            panel.toggle_visibility();
+        }
+    }
+
+    pub fn set_active_panel(&mut self, id: String) {
+        self.active_panel = Some(id);
+    }
+
+    pub fn render(&mut self, frame: &mut Frame) {
+        let areas = self.calculate_layout(frame.size());
+        
+        // Render panels based on their positions
+        for (id, position) in &self.layout.panel_positions {
+            if let Some(panel) = self.panels.get_mut(id) {
+                if panel.is_visible() {
+                    if let Some(area) = areas.get(position) {
+                        panel.render(frame, *area);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn handle_event(&mut self, event: &Event) -> bool {
+        // First, try the active panel
+        if let Some(active_id) = &self.active_panel {
+            if let Some(panel) = self.panels.get_mut(active_id) {
+                if panel.handle_event(event) {
+                    return true;
+                }
+            }
+        }
+
+        // Then try all visible panels
+        for panel in self.panels.values_mut() {
+            if panel.is_visible() && panel.handle_event(event) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn calculate_layout(&self, total_area: Rect) -> HashMap<PanelPosition, Rect> {
+        let mut areas = HashMap::new();
+        let mut remaining = total_area;
+
+        // Calculate left panel
+        if self.layout.has_visible_panel(&self.panels, PanelPosition::Left) {
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(self.left_panel_width),
+                    Constraint::Min(0),
+                ])
+                .split(remaining);
+            areas.insert(PanelPosition::Left, chunks[0]);
+            remaining = chunks[1];
+        }
+
+        // Calculate right panel
+        if self.layout.has_visible_panel(&self.panels, PanelPosition::Right) {
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(self.right_panel_width),
+                ])
+                .split(remaining);
+            remaining = chunks[0];
+            areas.insert(PanelPosition::Right, chunks[1]);
+        }
+
+        // Calculate bottom panel
+        if self.layout.has_visible_panel(&self.panels, PanelPosition::Bottom) {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(self.bottom_panel_height),
+                ])
+                .split(remaining);
+            remaining = chunks[0];
+            areas.insert(PanelPosition::Bottom, chunks[1]);
+        }
+
+        // Main area (center)
+        areas.insert(PanelPosition::Floating, remaining);
+
+        areas
+    }
+}
+
+#[derive(Default)]
+struct PanelLayout {
+    panel_positions: HashMap<String, PanelPosition>,
+}
+
+impl PanelLayout {
+    fn add_panel(&mut self, id: String, position: PanelPosition) {
+        self.panel_positions.insert(id, position);
+    }
+
+    fn has_visible_panel(&self, panels: &HashMap<String, Box<dyn Panel>>, position: PanelPosition) -> bool {
+        self.panel_positions.iter().any(|(id, pos)| {
+            *pos == position && panels.get(id).map_or(false, |p| p.is_visible())
+        })
+    }
+}
+
+/// File tree panel - adapted from Zed's project_panel
+pub struct FileTreePanel {
+    visible: bool,
+    items: Vec<FileTreeItem>,
+    state: ListState,
+}
+
+#[derive(Clone)]
+struct FileTreeItem {
+    name: String,
+    path: String,
+    is_directory: bool,
+    depth: usize,
+    expanded: bool,
+}
+
+impl FileTreePanel {
+    pub fn new() -> Self {
+        let mut state = ListState::default();
+        state.select(Some(0));
+        
+        Self {
+            visible: true,
+            items: vec![
+                FileTreeItem {
+                    name: "src".to_string(),
+                    path: "src".to_string(),
+                    is_directory: true,
+                    depth: 0,
+                    expanded: true,
+                },
+                FileTreeItem {
+                    name: "main.rs".to_string(),
+                    path: "src/main.rs".to_string(),
+                    is_directory: false,
+                    depth: 1,
+                    expanded: false,
+                },
+                FileTreeItem {
+                    name: "lib.rs".to_string(),
+                    path: "src/lib.rs".to_string(),
+                    is_directory: false,
+                    depth: 1,
+                    expanded: false,
+                },
+                FileTreeItem {
+                    name: "Cargo.toml".to_string(),
+                    path: "Cargo.toml".to_string(),
+                    is_directory: false,
+                    depth: 0,
+                    expanded: false,
+                },
+            ],
+            state,
+        }
+    }
+
+    fn move_selection(&mut self, direction: isize) {
+        let current = self.state.selected().unwrap_or(0);
+        let new_index = if direction > 0 {
+            (current + 1).min(self.items.len().saturating_sub(1))
+        } else {
+            current.saturating_sub(1)
+        };
+        self.state.select(Some(new_index));
+    }
+
+    fn toggle_expand(&mut self) {
+        if let Some(selected) = self.state.selected() {
+            if let Some(item) = self.items.get_mut(selected) {
+                if item.is_directory {
+                    item.expanded = !item.expanded;
+                }
+            }
+        }
+    }
+}
+
+impl Panel for FileTreePanel {
+    fn title(&self) -> &str {
+        "Files"
+    }
+
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(self.title())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue));
+
+        let items: Vec<ListItem> = self.items
+            .iter()
+            .map(|item| {
+                let indent = "  ".repeat(item.depth);
+                let icon = if item.is_directory {
+                    if item.expanded { "📂" } else { "📁" }
+                } else {
+                    "📄"
+                };
+                
+                ListItem::new(Line::from(vec![
+                    Span::raw(indent),
+                    Span::raw(format!("{} {}", icon, item.name)),
+                ]))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(block)
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
+            .highlight_symbol(">");
+
+        frame.render_stateful_widget(list, area, &mut self.state);
+    }
+
+    fn handle_event(&mut self, event: &Event) -> bool {
+        if let Event::Key(key) = event {
+            match key.code {
+                KeyCode::Up => {
+                    self.move_selection(-1);
+                    true
+                }
+                KeyCode::Down => {
+                    self.move_selection(1);
+                    true
+                }
+                KeyCode::Enter | KeyCode::Right => {
+                    self.toggle_expand();
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
+    }
+}
+
+/// Diagnostics panel - adapted from Zed's diagnostics panel
+pub struct DiagnosticsPanel {
+    visible: bool,
+    diagnostics: Vec<Diagnostic>,
+    state: ListState,
+}
+
+#[derive(Clone)]
+struct Diagnostic {
+    message: String,
+    file: String,
+    line: u32,
+    severity: DiagnosticSeverity,
+}
+
+#[derive(Clone, Copy)]
+enum DiagnosticSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl DiagnosticsPanel {
+    pub fn new() -> Self {
+        let mut state = ListState::default();
+        state.select(Some(0));
+
+        Self {
+            visible: false,
+            diagnostics: vec![
+                Diagnostic {
+                    message: "unused variable `x`".to_string(),
+                    file: "src/main.rs".to_string(),
+                    line: 10,
+                    severity: DiagnosticSeverity::Warning,
+                },
+                Diagnostic {
+                    message: "cannot find value `y` in this scope".to_string(),
+                    file: "src/lib.rs".to_string(),
+                    line: 25,
+                    severity: DiagnosticSeverity::Error,
+                },
+            ],
+            state,
+        }
+    }
+
+    fn move_selection(&mut self, direction: isize) {
+        let current = self.state.selected().unwrap_or(0);
+        let new_index = if direction > 0 {
+            (current + 1).min(self.diagnostics.len().saturating_sub(1))
+        } else {
+            current.saturating_sub(1)
+        };
+        self.state.select(Some(new_index));
+    }
+}
+
+impl Panel for DiagnosticsPanel {
+    fn title(&self) -> &str {
+        "Diagnostics"
+    }
+
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(format!("{} ({})", self.title(), self.diagnostics.len()))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red));
+
+        let items: Vec<ListItem> = self.diagnostics
+            .iter()
+            .map(|diag| {
+                let (icon, color) = match diag.severity {
+                    DiagnosticSeverity::Error => ("❌", Color::Red),
+                    DiagnosticSeverity::Warning => ("⚠️", Color::Yellow),
+                    DiagnosticSeverity::Info => ("ℹ️", Color::Blue),
+                };
+
+                ListItem::new(Line::from(vec![
+                    Span::raw(format!("{} ", icon)),
+                    Span::styled(&diag.message, Style::default().fg(color)),
+                    Span::raw(format!(" ({}:{})", diag.file, diag.line)),
+                ]))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(block)
+            .highlight_style(Style::default().bg(Color::Red).fg(Color::White))
+            .highlight_symbol(">");
+
+        frame.render_stateful_widget(list, area, &mut self.state);
+    }
+
+    fn handle_event(&mut self, event: &Event) -> bool {
+        if let Event::Key(key) = event {
+            match key.code {
+                KeyCode::Up => {
+                    self.move_selection(-1);
+                    true
+                }
+                KeyCode::Down => {
+                    self.move_selection(1);
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
+    }
+}
+
+/// Terminal panel - adapted from Zed's terminal
+pub struct TerminalPanel {
+    visible: bool,
+    output: Vec<String>,
+}
+
+impl TerminalPanel {
+    pub fn new() -> Self {
+        Self {
+            visible: false,
+            output: vec![
+                "$ cargo build".to_string(),
+                "   Compiling codex-rs v0.1.0".to_string(),
+                "    Finished dev [unoptimized + debuginfo] target(s) in 2.34s".to_string(),
+                "$ ".to_string(),
+            ],
+        }
+    }
+}
+
+impl Panel for TerminalPanel {
+    fn title(&self) -> &str {
+        "Terminal"
+    }
+
+    fn render(&mut self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(self.title())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green));
+
+        let text = self.output.join("\n");
+        let paragraph = Paragraph::new(text)
+            .block(block)
+            .style(Style::default().fg(Color::Green));
+
+        frame.render_widget(paragraph, area);
+    }
+
+    fn handle_event(&mut self, _event: &Event) -> bool {
+        false
+    }
+
+    fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    fn toggle_visibility(&mut self) {
+        self.visible = !self.visible;
+    }
+}
+
+/// Example usage
+pub fn create_example_panel_manager() -> PanelManager {
+    let mut manager = PanelManager::new();
+    
+    // Add file tree to left side
+    manager.add_panel(
+        "files".to_string(),
+        Box::new(FileTreePanel::new()),
+        PanelPosition::Left,
+    );
+    
+    // Add diagnostics to bottom
+    manager.add_panel(
+        "diagnostics".to_string(),
+        Box::new(DiagnosticsPanel::new()),
+        PanelPosition::Bottom,
+    );
+    
+    // Add terminal to bottom
+    manager.add_panel(
+        "terminal".to_string(),
+        Box::new(TerminalPanel::new()),
+        PanelPosition::Bottom,
+    );
+    
+    manager.set_active_panel("files".to_string());
+    
+    manager
+}
+
+/// Key bindings for panel management
+pub fn handle_panel_shortcuts(manager: &mut PanelManager, event: &Event) -> bool {
+    if let Event::Key(KeyEvent {
+        code,
+        modifiers: KeyModifiers::CONTROL,
+        ..
+    }) = event
+    {
+        match code {
+            KeyCode::Char('e') => {
+                manager.toggle_panel("files");
+                true
+            }
+            KeyCode::Char('d') => {
+                manager.toggle_panel("diagnostics");
+                true
+            }
+            KeyCode::Char('t') => {
+                manager.toggle_panel("terminal");
+                true
+            }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}

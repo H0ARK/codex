@@ -69,6 +69,19 @@ pub(crate) async fn stream_chat_completions(
     let url = format!("{}/chat/completions", base_url);
 
     debug!(url, "POST (chat)");
+    
+    // Special debug logging for Copilot
+    if provider.name == "GitHub Copilot" {
+        println!("🔧 [Copilot Debug] Request URL: {}", url);
+        println!("🔧 [Copilot Debug] Model: {}", model);
+        println!("🔧 [Copilot Debug] Tools count: {}", tools_json.len());
+        println!("🔧 [Copilot Debug] Tools: {}", serde_json::to_string_pretty(&tools_json).unwrap_or_default());
+        println!("🔧 [Copilot Debug] Messages count: {}", messages.len());
+        for (i, msg) in messages.iter().enumerate() {
+            println!("🔧 [Copilot Debug] Message {}: {}", i, serde_json::to_string(msg).unwrap_or_default());
+        }
+    }
+    
     trace!(
         "request payload: {}",
         serde_json::to_string_pretty(&payload).unwrap_or_default()
@@ -83,6 +96,16 @@ pub(crate) async fn stream_chat_completions(
         if let Some(api_key) = &api_key {
             req_builder = req_builder.bearer_auth(api_key.clone());
         }
+        
+        // Add Copilot-specific headers if this is a Copilot provider
+        if provider.name == "GitHub Copilot" {
+            println!("🔧 [Copilot Debug] Adding Copilot headers");
+            req_builder = req_builder
+                .header("Editor-Version", format!("Codex/{}", env!("CARGO_PKG_VERSION")))
+                .header("Copilot-Integration-Id", "vscode-chat")
+                .header("Copilot-Vision-Request", "false");
+        }
+        
         let res = req_builder
             .header(reqwest::header::ACCEPT, "text/event-stream")
             .json(&payload)

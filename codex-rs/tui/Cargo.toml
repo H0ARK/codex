@@ -19,7 +19,7 @@ anyhow = "1"
 base64 = "0.22.1"
 clap = { version = "4", features = ["derive"] }
 codex-ansi-escape = { path = "../ansi-escape" }
-codex-core = { path = "../core" }
+codex-core = { path = "../core", features = ["cli"] }
 codex-common = { path = "../common", features = ["cli", "elapsed"] }
 codex-linux-sandbox = { path = "../linux-sandbox" }
 color-eyre = "0.6.3"

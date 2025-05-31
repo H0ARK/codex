@@ -43,8 +43,26 @@ enum Subcommand {
     #[clap(visible_alias = "p")]
     Proto(ProtoCli),
 
+    /// GitHub Copilot authentication
+    #[clap(visible_alias = "c")]
+    Copilot(CopilotArgs),
+
     /// Internal debugging commands.
     Debug(DebugArgs),
+}
+
+#[derive(Debug, Parser)]
+struct CopilotArgs {
+    #[command(subcommand)]
+    cmd: CopilotCommand,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum CopilotCommand {
+    /// Authenticate with GitHub Copilot using device flow
+    Auth,
+    /// Check current Copilot token status
+    Status,
 }
 
 #[derive(Debug, Parser)]
@@ -92,6 +110,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
             prepend_config_flags(&mut proto_cli.config_overrides, cli.config_overrides);
             proto::run_main(proto_cli).await?;
         }
+        Some(Subcommand::Copilot(copilot_args)) => {
+            run_copilot_command(copilot_args, cli.config_overrides).await?;
+        }
         Some(Subcommand::Debug(debug_args)) => match debug_args.cmd {
             DebugCommand::Seatbelt(mut seatbelt_cli) => {
                 prepend_config_flags(&mut seatbelt_cli.config_overrides, cli.config_overrides);
@@ -112,6 +133,19 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         },
     }
 
+    Ok(())
+}
+
+async fn run_copilot_command(args: CopilotArgs, config_overrides: codex_common::CliConfigOverrides) -> anyhow::Result<()> {
+    match args.cmd {
+        CopilotCommand::Auth => {
+            codex_core::copilot::run_copilot_auth_command(config_overrides).await?;
+        }
+        CopilotCommand::Status => {
+            codex_core::copilot::run_copilot_status_command().await?;
+        }
+    }
+    
     Ok(())
 }
 

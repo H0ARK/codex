@@ -17,7 +17,7 @@ workspace = true
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-codex-core = { path = "../core" }
+codex-core = { path = "../core", features = ["cli"] }
 codex-common = { path = "../common", features = ["cli"] }
 codex-exec = { path = "../exec" }
 codex-linux-sandbox = { path = "../linux-sandbox" }

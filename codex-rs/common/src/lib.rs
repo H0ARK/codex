@@ -7,9 +7,13 @@ pub mod elapsed;
 #[cfg(feature = "cli")]
 pub use approval_mode_cli_arg::ApprovalModeCliArg;
 #[cfg(feature = "cli")]
+pub use approval_mode_cli_arg::AskForApproval;
+#[cfg(feature = "cli")]
+pub use approval_mode_cli_arg::SandboxPermission;
+#[cfg(feature = "cli")]
 pub use approval_mode_cli_arg::SandboxPermissionOption;
 
-#[cfg(any(feature = "cli", test))]
+#[cfg(feature = "cli")]
 mod config_override;
 
 #[cfg(feature = "cli")]

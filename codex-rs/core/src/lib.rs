@@ -14,7 +14,11 @@ pub mod codex_wrapper;
 pub mod config;
 pub mod config_profile;
 pub mod config_types;
+#[cfg(feature = "cli")]
+pub use codex_common::CliConfigOverrides;
 mod conversation_history;
+pub mod copilot;
+mod copilot_token_store;
 pub mod error;
 pub mod exec;
 pub mod exec_env;
